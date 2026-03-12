@@ -1,1289 +1,1017 @@
 """ 模拟社会
-by waterfish"""
-import numpy as np
-import math
+by waterfish
+优化版本：重构代码结构，修复 bug，优化用户体验
+"""
 import random
-import pygame
+import math
 
-nf=10 #农民人口
-nw=5 #工人人口
-nb=2 #商人人口
-nt=2 #税务官人口
-npl=1 #民生官员人口
-nm=1 #军事官员人口
-ntea=0 #教师人口
-ng=1 #总督人口
-nser=nt+npl+nm+ntea+ng #公务员总人口
+# ==================== 配置常量 ====================
+# 人口配置
+NF = 10  # 农民人口
+NW = 5   # 工人人口
+NB = 2   # 商人人口
+NT = 2   # 税务官人口
+NPL = 1  # 民生官员人口
+NM = 1   # 军事官员人口
+NTEA = 0 # 教师人口
+NG = 1   # 总督人口
 
-'''定义智力'''
+# 派系索引
+TAX_OFFICER = 0
+LIVELIHOOD_OFFICER = 1
+MILITARY_OFFICER = 2
+TEACHER = 3
+GOVERNOR = 4
 
-inf=np.random.normal(50, 15, nf)
-inw=np.random.normal(loc=50, scale=15, size=nw)
-inb=np.random.normal(loc=50, scale=15, size=nb)
+# 游戏配置
+DEFAULT_YEAR = 100
+INITIAL_SATISFACTION = 8.0
+INITIAL_FOOD = 40.0
+INITIAL_PRODUCT = 0.0
+FOOD_CONSUMPTION = 10.0
+PRODUCT_DEMAND = 6.0
+PRODUCT_COST = 2.0
 
-'''赋予初始资产a1（粮食），初始产品累积a2，国库为a3，初始满意度s为8，
-bf,bw为要农民、工人出售的粮食、产品量，b为公务员需要购买产品量，
-fp为农民购买产品的价格food price，pp为工人产品售价product price,
-bp为商人总收益,bc为商人总成本,商人向农民售价与成本的倍数为cp,Commodity Price,直接给出两个商人的价位'''
-a1f=np.ones(nf)*40
-a1w=np.ones(nw)*40
-a1b=np.ones(nb)*40
-a1t=np.ones(nt)*40
-a1pl=np.ones(npl)*40
-a1m=np.ones(nm)*40
-a1tea=np.ones(ntea)*40
-a1g=np.ones(ng)*40
-a1ser=np.ones(nser)*40
-'''考虑加入一个公务员序列，这样不用写很多'''
-
-a2f=np.ones(nf)*0
-a2w=np.ones(nw)*0
-a2b=np.ones(nb)*0
-a2t=np.ones(nt)*0
-a2pl=np.ones(npl)*0
-a2m=np.ones(nm)*0
-a2tea=np.ones(ntea)*0
-a2g=np.ones(ng)*0
-a2ser=np.ones(nser)*0
-a2b1=np.ones(nb)*0
-
-a3=0
-
-sf=np.ones(nf)*8
-sw=np.ones(nw)*8
-sb=np.ones(nb)*8
-st=np.ones(nt)*8
-spl=np.ones(npl)*8
-sm=np.ones(nm)*8
-stea=np.ones(ntea)*8
-sg=np.ones(ng)*8
-sser=np.ones(nser)*8
-
-bf=np.ones(nf)
-bw=np.ones(nw)
-b=0
-
-fp=np.ones(nf)
-pp=2.02
-bp=np.ones(nb)
-bc=np.ones(nb)
-cp=np.ones(nb)*12
-    
-smilitary=0
-print("您好长官，我们的国家由您来领导。")
-print('目前公民分为农民、商人、工人、公务员四个阶级，您需要调控税收来满足他们对于粮食和产品的需求，并充实自己的国库。满意度过低或者过高可能会导致他们成为罪犯！')
-print('请沉着应对突发的天灾和战争')
-print('祝您好运！')
-
-a=0.5
-bb=0
-aaa=0
-war=0
-anger=0
-ywar=0
-continue1=0
-#aaa为0，未探索状态；aaa为1，与慷慨帝国相遇；aaa为2，与霸权帝国相遇；war等于0，和平；等于1，开战
-
-
-
-a="y"
-'''输入各种参数，有重新输入机会'''
-while a=="y":
-    
-    year=100
-    y=0
-    
-    
-    tc=2
-    
-    y=0
-    '''输入税率'''
-    rtax=2
-    while rtax<0 or rtax>1:
+# ==================== 工具函数 ====================
+def get_float_input(prompt, default=None, min_val=None, max_val=None):
+    """获取浮点数输入，带验证"""
+    while True:
         try:
-            rtax=input("请输入农民税率(0-1之间，默认0.05)：")
-            rtax=float(rtax)
-           
-        except:
-            rtax=0.05
-    rtax1=2
-    while rtax1<0 or rtax1>1:
+            value = input(prompt)
+            if not value and default is not None:
+                return default
+            value = float(value)
+            if min_val is not None and value < min_val:
+                print(f"值不能小于{min_val}")
+                continue
+            if max_val is not None and value > max_val:
+                print(f"值不能大于{max_val}")
+                continue
+            return value
+        except ValueError:
+            if default is not None:
+                print(f"输入无效，使用默认值：{default}")
+                return default
+            print("请输入有效数字")
+
+def get_int_input(prompt, default=None, min_val=None, max_val=None):
+    """获取整数输入，带验证"""
+    while True:
         try:
-            rtax1=input("请输入工人税率(0-1之间，默认0.1)：")
-            rtax1=float(rtax1)
-           
-        except:
-            rtax1=0.1
-    rtax2=2
-    while rtax2<0 or rtax2>1:
-        try:
-            rtax2=input("请输入商人税率(0-1之间，默认0.2)：")
-            rtax2=float(rtax2)
-           
-        except:
-            rtax2=0.2
-    tax=0
-    '''总税款tax，税率rtax'''
-    ser=-10
-    while ser==-10:
-        try:
-            ser=input("请输入公务员工资(默认20)：")
-            ser=float(ser)
-           
-        except:
-            ser=20
+            value = input(prompt)
+            if not value and default is not None:
+                return default
+            value = int(value)
+            if min_val is not None and value < min_val:
+                print(f"值不能小于{min_val}")
+                continue
+            if max_val is not None and value > max_val:
+                print(f"值不能大于{max_val}")
+                continue
+            return value
+        except ValueError:
+            if default is not None:
+                print(f"输入无效，使用默认值：{default}")
+                return default
+            print("请输入有效整数")
+
+def get_choice_input(prompt, choices, default=None):
+    """获取选择输入"""
+    while True:
+        value = input(prompt).strip().lower()
+        if not value and default is not None:
+            return default
+        if value in choices:
+            return value
+        print(f"请输入以下选项之一：{', '.join(choices)}")
+
+# ==================== 类定义 ====================
+class Person:
+    """个人类"""
+    def __init__(self, intelligence=50):
+        self.intelligence = intelligence
+        self.food = INITIAL_FOOD  # a1: 粮食
+        self.product = INITIAL_PRODUCT  # a2: 产品
+        self.satisfaction = INITIAL_SATISFACTION  # s: 满意度
+        self.for_sale_food = 1.0  # bf: 要出售的粮食
+        self.for_sale_product = 1.0  # bw: 要出售的产品
     
+    def total_wealth(self, product_price=3):
+        """计算总财富（粮食 + 产品*价格）"""
+        return self.food + self.product * product_price
+
+
+class Group:
+    """群体类，管理一类人群"""
+    def __init__(self, size, name):
+        self.size = size
+        self.name = name
+        self.members = [Person(intelligence=random.gauss(50, 15)) for _ in range(size)]
     
-    print("游戏将进行",year,"年")
-    print("运输成本为",tc)
-    print("农民税率为",rtax)
-    print("工人税率为",rtax1)
-    print("商人税率为",rtax2)
-    print("公务员工资为",ser)
-    a=input("是否重新输入？（y/n）")
-
-disas=0
-pdisas=0.1
-pharvest=0.2
-pf=np.ones(nf)
-pw=np.ones(nw)
-
-while y<year:
-    y +=1
-    tax=0
-    print('现在是第',y,'年')
-    '''天灾系统，在五年后生效，会随机造成减产；也会出现丰收可能'''
-    px=0
-    #修正参数
-    if y<=5:
-        pa=random.random()
-        if pa>0.66:
-            disas=-0.2
-            print('改革春风吹满地！增产20%')
-
-
-    if y>5:
-        pa=random.random()
-        
-
-        if y<15:
-            
-            if 4*pa>pdisas:
-                disas=0.2
-                print("天灾来临,减产20%")
-            elif pa<1-pharvest:
-                if pa>0.5:
-                    disas=-0.3
-
-                    print('粮食大丰收，洪水被赶跑！增产30%')
-                else:
-                    print('百姓安居乐业，齐夸党的领导！增产30%')
-            
-        else:
-            
-            if pa<pdisas-px:
-                disas=0.8
-                px+=0.05
-                print('天灾蹂躏大地，减产80%')
-                if px>0.04:
-                    print('获得成就：天灾如影，常伴吾形')
-            elif pa<3*pdisas-px:
-                disas=0.5
-                px+=0.03
-                print('天灾扫过荒野，减产50%')
-            elif pa<5*pdisas-px:
-                disas=0.2
-                px+=0.01
-                print('天灾降临人间，减产20%')
-            elif pa>1-pharvest*3/5:
-                px=0
-                
-                if pa>0.5:
-                    disas=-0.3
-
-                    print('粮食大丰收，洪水被赶跑！增产40%')
-                else:
-                    print('百姓安居乐业，齐夸党的领导！增产40%')
-            else:
-                px=0
-            
-       
-                
-        
-    '''计算农民、工人收益。并且农民计算粮食满意度，工人计算产品满意度'''
-    for i in range(0,nf):
-        if sf[i]>-10 and sf[i]<15:
-            '''满意度在正常范围内'''
-            pf[i]=(130+30*(inf[i]-50)/100)*(1-disas)
-            tax=tax+pf[i]*rtax
-            a1f[i]=a1f[i]+pf[i]*(1-rtax)
-            bf[i]=a1f[i]-10-20
-            '''用于购买商品的粮食为储备扣除需求，扣除储备需求'''
-            if a1f[i]<10:
-                bf[i]=0
-                sf[i]=sf[i]-5
-            else:
-                if a1f[i]<30:
-                    bf[i]=0
-                    sf[i]=sf[i]-2
-                else:
-                    sf[i]=sf[i]+0.5
-    for i in range(0,nw):
-        if sw[i]>-10 and sw[i]<15:
-            pw[i]=15+3*(inw[1]-50)/100
-            if a1w[i]>pw[i]*2:
-                a2w[i]=a2w[i]+pw[i]
-                a1w[i]-=2*pw[i]
-            else:
-                pw[i]=a1w[i]/2
-                a2w[i]=a2w[i]+pw[i]
-                a1w[i]=0
-                '''生产一个产品的成本为2，如果成本不足则全部生产'''
-            if sw[i]>10 and sw[i]<15:
-                if a2w[i]<2-(sw[i]-10)*(sw[i]-15)/3:
-                    bw[i]=0
-                    a2w[i]=0
-                    sw[i]-=2
-                elif a2w[i]<6-(sw[i]-10)*(sw[i]-15):
-                    bw[i]=0
-                    a2w[i]-=2-(sw[i]-10)*(sw[i]-15)/3
-                else:
-                    bw[i]=a2w[i]-6+(sw[i]-10)*(sw[i]-15)
-                    a2w[i]-=2-(sw[i]-10)*(sw[i]-15)/3
-                    sw[i]=sw[i]+0.5
-            else:
-                if a2w[i]<2:
-                    bw[i]=0
-                    a2w[i]=0
-                    sw[i]-=2
-                elif a2w[i]<6:
-                    bw[i]=0
-                    a2w[i]-=2
-                else:
-                    bw[i]=a2w[i]-6
-                    a2w[i]-=2
-                    sw[i]=sw[i]+0.5
-                    
-                
-            if a1w[i]<30:
-                pp1=(30-a1w[i])/(bw[i]*(1-rtax1))
-                if pp<pp1:
-                    pp=pp1
-                    '''粮食不足需求时按照需求定价，超过需求时，定价不低于2.02。生产成本为2'''
-
-
-    '''下面是商人购买过程，对于两个商人的时候'''
-   
-        
-    for i in range(0,nw):
-            for j in range(0,nb):
-                if i%nb==j:
-                    '''一半给商人1，一半给商人2'''
-                    
-                    a1w[i]=a1w[i]+pp*bw[i]*(1-rtax1)
-                    a1b[j]=a1b[j]-pp*bw[i]
-                    a2b[j] +=a2w[i]
-                    
-                    tax +=pp*a2w[i]*rtax1
-                    bc[j] +=pp*bw[i]
-                    bw[i]=0
-    '''下面直接将商人的产品满意度进行判断，减去其所需'''
-    for i in range(0,nb):
-        if sb[i]>10 and sb[i]<15:
-
-            if a2b[i]<2-(sb[i]-10)*(sb[i]-15)/3:
-                a2b[i]=0
-                sb[i]-=2
-            elif a2w[i]<6-(sb[i]-10)*(sb[i]-15):
-                a2b[i]-=2-(sb[i]-10)*(sb[i]-15)/3
-            else:
-                a2b[i]-=2-(sb[i]-10)*(sb[i]-15)/3
-                sb[i]=sb[i]+0.5
-        else:
-
-            if a2b[i]<2:
-                a2b[i]=0
-                sb[i]=sb[i]-2
-            elif a2w[i]<6:
-                a2b[i]-=2
-            else:
-                a2b[i]-=2
-                sb[i]=sb[i]+0.5
-    '''对政府官员销售'''
-
-    for i in range(0,nser):
-            for j in range(0,nb):
-                if i%nb==j:
-                    if sser[i]>10 and sser[i]<15:
-                        if a2ser[i]<6-(sser[i]-10)*(sser[i]-15):
-                            '''产品少于需求的时候才买'''
-                            b=6-(sser[i]-10)*(sser[i]-15)-a2ser[i]
-                            #根据满意度和产品剩余量计算出需要购买的产品量b
-                            
-                            if a1ser[i]<30:
-                                b=0
-                            elif a1ser[i]<30+b*1.1*pp:
-                                b=(a1ser[i]-30)/(1.1*pp)
-                                if a2b[j]==0:
-                                    break
-
-                                if b>a2b[j]:
-                                    a2ser[i]+=a2b[j]                                    
-                                    a1ser[i]-=1.1*pp*a2b[j]
-                                    a1b[j]+=1.1*pp*a2b[j]
-                                    bp[j] +=1.1*pp*a2b[j]
-                                    a2b[j]=0
-                                else:
-
-                                    a2ser[i] +=b
-                                    a1ser[i]=30
-                                    a1b[j] +=a1ser[i]-30
-                                    a2b[j]=a2b[j]-b
-                                    bp[j] +=a1ser[i]-30
-                            else:                                
-                                if a2b[j]==0:
-                                    break
-                                if b>a2b[j]:
-                                    a2ser[i]+=a2b[j]                                    
-                                    a1ser[i]-=1.1*pp*a2b[j]
-                                    a1b[j]+=1.1*pp*a2b[j]
-                                    bp[j] +=1.1*pp*a2b[j]
-                                    a2b[j]=0
-                                else:
-                                   
-                                    a1ser[i]=a1ser[i]-b*1.1*pp
-                                    a2ser[i]=a2ser[i]+b
-                                    a1b[j]+=b*1.1*pp
-                                    a2b[j]=a2b[j]-b
-                                    bp[j] +=b*1.1*pp
-                    elif sser[i]>0 and sser[i]<=10:
-                        if a2ser[i]<6:
-                            '''产品少于需求的时候才买'''
-                            b=6-a2ser[i]
-                            #根据满意度和产品剩余量计算出需要购买的产品量b
-                            if a1ser[i]<30:
-                                b=0
-                            elif a1ser[i]<30+b*1.1*pp:
-                                b=(a1ser[i]-30)/(1.1*pp)
-                                if a2b[j]==0:
-                                    break
-
-                                if b>a2b[j]:
-                                    a2ser[i]+=a2b[j]                                    
-                                    a1ser[i]-=1.1*pp*a2b[j]
-                                    a1b[j]+=1.1*pp*a2b[j]
-                                    bp[j] +=1.1*pp*a2b[j]
-                                    a2b[j]=0
-                                else:
-
-                                    a2ser[i] +=b
-                                    a1ser[i]=30
-                                    a1b[j] +=a1ser[i]-30
-                                    a2b[j]=a2b[j]-b
-                                    bp[j] +=a1ser[i]-30
-                            else:                                
-                                if a2b[j]==0:
-                                    break
-                                if b>a2b[j]:
-                                    a2ser[i]+=a2b[j]                                    
-                                    a1ser[i]-=1.1*pp*a2b[j]
-                                    a1b[j]+=1.1*pp*a2b[j]
-                                    bp[j] +=1.1*pp*a2b[j]
-                                    a2b[j]=0
-                                else:
-                                   
-                                    a1ser[i]=a1ser[i]-b*1.1*pp
-                                    a2ser[i]=a2ser[i]+b
-                                    a1b[j]+=b*1.1*pp
-                                    a2b[j]=a2b[j]-b
-                                    bp[j] +=b*1.1*pp
-                    else:
-                        '''满意度过高或者过低的情况，会先从国库偷钱'''
-                        
-
-                        t=abs(sser[i]-7.5)-7.5
-                        if 0.1*a3>20*t:
-                            t=0.005*a3
-
-                        a3=a3-20*t
-                        a1ser[i]+=20*t
-                        if a2ser[i]<6:
-                            b=6-a2ser[i]
-                           
-                            if a1ser[i]<30:
-                                b=0
-                            elif a1ser[i]<30+b*1.1*pp:
-                                b=(a1ser[i]-30)/(1.1*pp)
-                                if a2b[j]==0:
-                                    break
-
-                                if b>a2b[j]:
-                                    a2ser[i]+=a2b[j]                                    
-                                    a1ser[i]-=1.1*pp*a2b[j]
-                                    a1b[j]+=1.1*pp*a2b[j]
-                                    bp[j] +=1.1*pp*a2b[j]
-                                    a2b[j]=0
-                                else:
-
-                                    a2ser[i] +=b
-                                    a1ser[i]=30
-                                    a1b[j] +=a1ser[i]-30
-                                    a2b[j]=a2b[j]-b
-                                    bp[j] +=a1ser[i]-30
-                                
-                            else: 
-                                if a2b[j]==0:
-                                    break
-                                if b>a2b[j]:
-                                    a2ser[i]+=a2b[j]                                    
-                                    a1ser[i]-=1.1*pp*a2b[j]
-                                    a1b[j]+=1.1*pp*a2b[j]
-                                    bp[j] +=1.1*pp*a2b[j]
-                                    a2b[j]=0
-                                else:
-                                   
-                                    a1ser[i]=a1ser[i]-b*1.1*pp
-                                    a2ser[i]=a2ser[i]+b
-                                    a1b[j]+=b*1.1*pp
-                                    a2b[j]=a2b[j]-b
-                                    bp[j] +=b*1.1*pp
-
-      
-    j=0
-    for i in range(0,nt):
-        
-        a1t[i]=a1ser[j]
-        a2t[i]=a2ser[j]
-        st[i]=sser[j]
-        j+=1
-    for i in range(0,npl):
-        a1pl[i]=a1ser[j]
-        a2pl[i]=a2ser[j]
-        spl[i]=sser[j]
-        j+=1
-    for i in range(0,nm):
-        a1m[i]=a1ser[j]
-        a2m[i]=a2ser[j]
-        sm[i]=sser[j]
-        j+=1
-    for i in range(0,ntea):
-        a1tea[i]=a1ser[j]
-        a2tea[i]=a2ser[j]
-        stea[i]=sser[j]
-        j+=1
-    for i in range(0,ng):
-        a1g[i]=a1ser[j]
-        a2g[i]=a2ser[j]
-        sg[i]=sser[j]
-        j+=1
-    '''以上是把公务员的参数分给各个岗位'''
-
-    '''下面考虑对农民销售'''
-    for j in range(0,nb):
-        if a2b[j]<nf*(6+6.25):
-            a1b[j]=a1b[j]-tc*a2b[j]
-            bc[j]+=tc*a2b[j]
-            a2b1[j]=0
-            #运输成本
-        else:
-            a2b1[j]=a2b[j]-nf*(6+6.25)
-            a2b[j]=nf*(6+6.25)
-    cp=np.ones(nb)*10    
-    for k in range(1,12):
-        for l in range(0,nb):
-            if cp[l]>2:
-                cp[l]-=1
-            else:
-                cp[l]=1.01
-        for i in range(0,nf):
-                for j in range(0,nb):
-                    if i%nb==j:
-                        if sf[i]>10 and sf[i]<15:
-                            if a2f[i]<6-(sf[i]-10)*(sf[i]-15):
-                                b=6-(sf[i]-10)*(sf[i]-15)-a2f[i]
-                                
-                                fp[i]=bf[i]/b
-                                
-                                if fp[i]>=cp[j]*(pp+tc):
-                                    if a2b[j]==0:
-                                        
-                                        break
-                                    
-                                    if b>a2b[j]:
-                                        
-                                        a2f[i]+=a2b[j]                                    
-                                        a1f[i]-=cp[j]*(pp+tc)*a2b[j]
-                                        a1b[j]+=cp[j]*(pp+tc)*a2b[j]
-                                        bp[j] +=cp[j]*(pp+tc)*a2b[j]
-                                        a2b[j]=0
-                                    else:
-                                        a2f[i] +=b
-                                        a1f[i] -=b*cp[j]*(pp+tc)
-                                        a1b[j] +=b*cp[j]*(pp+tc)
-                                        a2b[j] -=b
-                                        bp[j] +=b*cp[j]*(pp+tc)
-                                                                   
-                        else:
-                            '''对于幸福度不在（10，15）的情况'''
-                            if a2f[i]<6:
-                                b=6-a2f[i]
-                                fp[i]=bf[i]/b
-                               
-                                if fp[i]>=cp[j]*(pp+tc):
-                                    if a2b[j]==0:
-                                        
-                                        break
-
-                                    if b>a2b[j]:
-                                        a2f[i]+=a2b[j]                                    
-                                        a1f[i]-=cp[j]*(pp+tc)*a2b[j]
-                                        a1b[j]+=cp[j]*(pp+tc)*a2b[j]
-                                        bp[j] +=cp[j]*(pp+tc)*a2b[j]
-                                        a2b[j]=0
-                                    else:
-                                        
-                                        a2f[i] +=b
-                                        a1f[i] -=b*cp[j]*(pp+tc)
-                                        a1b[j] +=b*cp[j]*(pp+tc)
-                                        a2b[j] -=b
-                                        bp[j] +=b*cp[j]*(pp+tc)
-
-    '''下面考虑产品过于贵，以上流程没有将产品卖完，农民采用最低价尽可能买入'''
-    for i in range(0,nf):
-        for j in range(0,nb):
-            if i%nb==j:
-                if sf[i]>10 and sf[i]<15:
-                    if a2f[i]<2-(sf[i]-10)*(sf[i]-15)/3:
-                        b=bf[i]/(cp[j]*(pp+tc))
-                                               
-                        if a2b[j]==0:
-                               
-                            break
-                                    
-                        if b>a2b[j]:
-                            a2f[i]+=a2b[j]                                    
-                            a1f[i]-=cp[j]*(pp+tc)*a2b[j]
-                            a1b[j]+=cp[j]*(pp+tc)*a2b[j]
-                            bp[j] +=cp[j]*(pp+tc)*a2b[j]
-                            a2b[j]=0
-                        else:
-                            a2f[i] +=b
-                            a1f[i] -=b*cp[j]*(pp+tc)
-                            a1b[j] +=b*cp[j]*(pp+tc)
-                            a2b[j] -=b
-                            bp[j] +=b*cp[j]*(pp+tc)
-          
-
-                
-    '''下面计算商人税收'''
-    for i in range(0,nb):
-        if bp[i]>bc[i]:
-            a1b[i]-=(bp[i]-bc[i])*rtax2
-            tax+=(bp[i]-bc[i])*rtax2
-        '''有收益才需要交税'''
-        a2b[i]+=a2b1[i]
+    def __len__(self):
+        return self.size
     
-    '''计算公务员收入和国库'''
-    a3+=tax
-    for i in range(0,nser):
-        a1ser[i]+=ser
-        a3-=ser
-  
-        
-    j=0    
-    for i in range(0,nt):
-        
-        a1t[i]=a1ser[j]
-        a2t[i]=a2ser[j]
-        st[i]=sser[j]
-        j+=1
-    for i in range(0,npl):
-        a1pl[i]=a1ser[j]
-        a2pl[i]=a2ser[j]
-        spl[i]=sser[j]
-        j+=1
-    for i in range(0,nm):
-        a1m[i]=a1ser[j]
-        a2m[i]=a2ser[j]
-        sm[i]=sser[j]
-        j+=1
-    for i in range(0,ntea):
-        a1tea[i]=a1ser[j]
-        a2tea[i]=a2ser[j]
-        stea[i]=sser[j]
-        j+=1
-    for i in range(0,ng):
-        a1g[i]=a1ser[j]
-        a2g[i]=a2ser[j]
-        sg[i]=sser[j]
-        j+=1
-
-    '''计算消耗和满意度,国库会补贴农民和工人'''
-    for i in range(0,nf):
-        if a1f[i]<10 and sf[i]<=2:
-            a1f[i]+=10
-            a3-=10
-            #国库补贴
-        if sf[i]>10 and sf[i]<15:
-            if a2f[i]<2-(sf[i]-10)*(sf[i]-15)/3:
-                a2f[i]=0
-                sf[i]-=2
-            elif a2f[i]<6-(sf[i]-10)*(sf[i]-15):
-                a2f[i]-=2-(sf[i]-10)*(sf[i]-15)/3
-            else:
-                a2f[i]-=2-(sf[i]-10)*(sf[i]-15)/3
-                sf[i]+=0.5                
-        else:
-            if a2f[i]<2:
-                a2f[i]=0
-                sf[i]-=5
-            elif a2f[i]<6:
-                a2f[i]-=2
-            else:
-                a2f[i]-=2
-                sf[i]+=0.5
-                
-    for i in range(0,nw):
-        if a1w[i]<10 and sw[i]<=2:
-            a1w[i]+=10
-            a3-=10
-            #国库补贴
-        if a1w[i]<10:
-            a1w[i]=0
-            sw[i]-=5
-        elif a1w[i]<30:
-            a1w[i]-=10
-            sw[i]-=2
-        else:
-            a1w[i]-=10
-            sw[i]+=0.5
-
-            
-    for i in range(0,nb):
-        #商人无补贴，粮食可以负债，粮食不足时成本价出卖产品
-        if a1b[i]<0:
-            #商人粮食不足，出卖产品
-            if a1b[i]+2*a2b[i]<30:
-                a2b[i]=0
-                a1b[i]+=2*a2b[i]
-            else:
-                delta=a1b[i]
-                a1b[i]=30
-                a2b[i]-=(30-a1b[i])/2
-            
-            
-        else:
-            if a1b[i]<10:
-                a1b[i]-=10
-                sb[i]-=5
-            elif a1b[i]<30:
-                a1b[i]-=10
-                sb[i]-=2
-            else:
-                a1b[i]-=10
-                sb[i]+=0.5
-            
-    for i in range(0,nser):
-        if a1ser[i]<10:
-            a1ser[i]=0
-            sser[i]-=5
-        elif a1ser[i]<30:
-            a1ser[i]-=10
-            sser[i]-=2
-        else:
-            a1ser[i]-=10
-            sser[i]+=0.5
-
-        if sser[i]>10 and sser[i]<15:
-            if a2ser[i]<2-(sser[i]-10)*(sser[i]-15)/3:
-                a2ser[i]=0
-                sser[i]-=2
-            elif a2ser[i]<6-(sser[i]-10)*(sser[i]-15):
-                a2ser[i]-=2
-            else:
-                a2ser[i]-=2
-                sser[i]+=0.5                
-        else:
-            if a2ser[i]<2:
-                a2ser[i]=0
-                sser[i]-=2
-            elif a2ser[i]<6:
-                a2ser[i]-=2
-            else:
-                a2ser[i]-=2
-                sser[i]+=0.5
-    j=0    
-    for i in range(0,nt):
-        
-        a1t[i]=a1ser[j]
-        a2t[i]=a2ser[j]
-        st[i]=sser[j]
-        j+=1
-    for i in range(0,npl):
-        a1pl[i]=a1ser[j]
-        a2pl[i]=a2ser[j]
-        spl[i]=sser[j]
-        j+=1
-    for i in range(0,nm):
-        a1m[i]=a1ser[j]
-        a2m[i]=a2ser[j]
-        sm[i]=sser[j]
-        j+=1
-    for i in range(0,ntea):
-        a1tea[i]=a1ser[j]
-        a2tea[i]=a2ser[j]
-        stea[i]=sser[j]
-        j+=1
-    for i in range(0,ng):
-        a1g[i]=a1ser[j]
-        a2g[i]=a2ser[j]
-        sg[i]=sser[j]
-        j+=1
-    '''计算阶级内最穷和最穷阶级'''
-    avef=0
-    avew=0
-    aveser=0
-    t=0
-    least=a1f[0]+3*a2f[0]
-    for i in range(0,nf):
-        avef+=a1f[i]+3*a2f[i]
-        if least>a1f[i]+3*a2f[i]:
-            least=a1f[i]+3*a2f[i]
-            t=i
-    sf[t]-=0.4
-    avef=avef/nf
-
-    t=0
-    least=a1w[0]+3*a2w[0]
-    for i in range(0,nw):
-        avew+=a1w[i]+3*a2w[i]
-        if least>a1w[i]+3*a2w[i]:
-            least=a1w[i]+3*a2w[i]
-            t=i
-    sw[t]-=0.4
-    avew=avew/nw
-
-    t=0
-    least=a1ser[0]+3*a2ser[0]
-    for i in range(0,nser):
-        aveser+=a1ser[i]+3*a2ser[i]
-        if least>a1ser[i]+3*a2ser[i]:
-            least=a1ser[i]+3*a2ser[i]
-            t=i
-    sser[t]-=0.4
-    aveser=aveser/nser
-    b=[avef,avew,aveser]
-    b1=np.min(b)
-    b11=np.max(b)
-
-    b2=np.where(b==b1)
-    try:
-        b3=b2[0][1]
-        '''这说明b2中至少有两个元素，至少有两个阶级相等，都不减去满意度'''
-    except:
-        
-        b3=b2[0][0]
-        bear=0
-        if b11>b1+10:
-            d=b11-b1
-            bear+=1
-            if bear>1:
-                bear=0
-                if b3==0:
-                    for i in range(0,nf):
-                        sf[i]-=1.3*(math.atan(40)+math.atan(2*d-40))
-                if b3==1:
-                    for i in range(0,nw):
-                        sw[i]-=1.3*(math.atan(40)+1.2*math.atan(2*d-40))
-                if b3==2:
-                    for i in range(0,nser):
-                        sser[i]-=1.3*(math.atan(40)+1.2*math.atan(2*d-40))
-    '''下面开始结算满意度对周围人的影响,cr为罪犯数量'''
-    cr=0
-    for i in range(0,nf):
-        if sf[i]<0 and sf[i]>-10:
-            sf[i-1]-=0.1*(sf[i])
-            sf[i-2]-=0.1*(sf[i])
-        elif sf[i]<-10 or sf[i]>20:
-            j=abs(sf[i]-2.5)
-            sf[i-1]-=1*(j-12.5)
-            sf[i-2]-=1*(j-12.5)
-            cr+=1
-    for i in range(0,nw):
-        if sw[i]<0 and sw[i]>-10:
-            sw[i-1]-=0.2*(sw[i])
-            sw[i-2]-=0.2*(sw[i])
-        elif sw[i]<-10 or sw[i]>20:
-            j=abs(sw[i]-2.5)
-            sw[i-1]-=1*(j-12.5)
-            sw[i-2]-=1*(j-12.5)
-            cr+=1
-
-    for i in range(0,nser):
-        if sser[i]<0 and sser[i]>-10:
-            sser[i-1]-=0.2*(sser[i])
-            sser[i-2]-=0.2*(sser[i])
-        elif sser[i]<-10 or sser[i]>20:
-            j=abs(sser[i]-2.5)
-            sser[i-1]-=1*(j-12.5)
-            sser[i-2]-=1*(j-12.5)
-            cr+=1
-    if cr==0:
-        #无罪犯时全员满意度加0.1
-        for i in range(0,nf):
-            sf[i]+=0.1
-        for i in range(0,nw):
-            sw[i]+=0.1
-        for i in range(0,nser):
-            sser[i]+=0.1
-        for i in range(0,nb):
-            sb[i]+=0.1
-
-    j=0    
-    for i in range(0,nt):
-        a1t[i]=a1ser[j]
-        a2t[i]=a2ser[j]
-        st[i]=sser[j]
-        j+=1
-    for i in range(0,npl):
-        a1pl[i]=a1ser[j]
-        a2pl[i]=a2ser[j]
-        spl[i]=sser[j]
-        j+=1
-    for i in range(0,nm):
-        a1m[i]=a1ser[j]
-        a2m[i]=a2ser[j]
-        sm[i]=sser[j]
-        j+=1
-    for i in range(0,ntea):
-        a1tea[i]=a1ser[j]
-        a2tea[i]=a2ser[j]
-        stea[i]=sser[j]
-        j+=1
-    for i in range(0,ng):
-        a1g[i]=a1ser[j]
-        a2g[i]=a2ser[j]
-        sg[i]=sser[j]
-        j+=1
-    while war!='否':
-        try:
-            war=input('是否加入战争模式（是/否）')
-            
-        except:
-            print('请重新输入')
-            war='是'
-
-    while war!='否':
-       
-
-        '''战争系统，实现国库的消耗并体现随机性'''
-     
-        if y>5:
-            if aaa==0:
-                p=random.random()
-                if p<0.5+bb:
-                    print('暂无外交风波')
-                    bb+=0.15
-                else:
-                    p=random.random()
-                    if p<0.25:
-
-                        print('收到消息：我帝国物产丰盈，无所不有。国库+1000')
-                        a3+=2000
-                        print('成就：大国的见面礼')
-                        mood=80
-                        #mood为大国忍耐度
-
-                        aaa=1
-                    else:
-                        print('收到消息：臣服于我，否则帝国的铁骑将荡平你的国家')
-                        mood=75
-                        aaa=2
-            '''下面是与慷慨帝国交流状态'''
-            if aaa==1:
-                if mood>60:
-                    print('你好我的朋友，看来我们需要一些友好交换')
-                    player=input('是否进贡（是/否）')
-                    if player=='是':
-                        deltat=600+400*random.random()
-                        a3-=deltat
-                        mood+=2
-                        print('国库失去',deltat)
-                        p=random.random()
-                        if p>0.25:
-                            print('我们的友谊长青')
-                            deltat=600+800*random.random()
-
-                            a3+=deltat
-                            print('国库获得',deltat)
-                    else:
-                        mood-=5
-                        p=random.random()
-                        if p>0.6:
-
-                            print('我们的友谊不经考验吗？')
-                        elif p>0.33:
-                            print('我们仍留有回旋余地')
-                        else:
-                            print('望你好自为之')
-                        deltat=800
-                        a3+=deltat
-                        print('国库获得',deltat)
-                else:
-                    print('我们已经解除外交关系')
-                    ywar+=1
-                    
-                    #定义战争年份和总军费，帮助计算军费
-                    p=random.random()
-                    i=1
-                    while i==1:
-                        try:
-                            military=input('目前有开战风险，请输入军费投入（大于等于零）')
-                            military=int(military)
-                            smilitary+=military
-                            i=0
-                            if military<0:
-                                i=1
-                                print('这是军费！不能克扣！')                            
-                        except:
-                            i=1
-                            
-                    if p>mood/60:
-                        mood-=6
-                        
-                    else:
-                        print('你已经挑战了我们的底线，现在开战！')
-                        player=1
-
-                        while player!=3:
-                            try:
-                                player=input('赔款（1），迎战（2）')
-                                player=int(player)
-                                if player==1:
-                                    a3-=1200+200*p
-                                    mood+=8
-                                    player=3
-                                if player==2:
-                                    #开战状态
-                                    mood-=6
-                                    player=3
-                                    p=random.random()
-                                    pwin=smilitary/(smilitary+800*(ywar))
-                                    if pwin>0.8:
-                                        print('轻取敌军，大捷！')
-                                        a3+=1500+500*p
-                                        print('缴获战利品',1500+500*p)
-                                        mood+=10
-                                    if pwin<0.2:
-                                        print('脆败')
-                                        a3-=1800+500*p
-                                        print('战争赔款',1800+500*p)
-                                        mood+=12
-                                    else:
-                                        print('激烈的战斗！')
-                                        input('任意键继续')
-                                        if pwin>p:
-                                            print('惨烈的胜利！')
-                                            a3+=700+600*p
-                                            print('国库获得',700+600*p)
-                                            
-                                        if pwin<p:
-                                            print('功亏一篑')
-                                            a3-=650+600*p
-                                            print('赔款',650+600*p)
-                                            mood+=4
-                                        else:
-                                            print('两败俱伤')
-                                            a3-=400
-                                            print('补给消耗',400)
-                                            mood+=5
-                                       
-                            except:
-                                player=1
-                            
-
-
-                        i=1
-                        while i==1:
-                            try:
-                                military=input('目前有开战风险，请输入军费投入（大于等于零）')
-                                military=int(military)
-                                smilitary+=military
-                                i=0
-                                if military<0:
-                                    i=1
-                                    print('这是军费！不能克扣！')                            
-                            except:
-                                i=1
-            '''下面是与霸权帝国交流状态'''
-            if aaa==2:
-                if mood>60:
-                    print('你好，我们需要一些贡品')
-                    player=input('是否进贡（是/否）')
-                    if player=='是':
-                        deltat=700+400*random.random()
-                        a3-=deltat
-                        mood+=2
-                        print('国库失去',deltat)
-                       
-                        
-                    else:
-                        mood-=6
-                        p=random.random()
-                        if p>0.6:
-
-                            print('看来你们有自己的想法')
-                        elif p>0.33:
-                            print('你们服从性太差')
-                        else:
-                            print('望你好自为之')
-                      
-                else:
-                    print('我们已经解除外交关系')
-                    ywar+=1
-                    
-                    #定义战争年份和总军费，帮助计算军费
-                    p=random.random()
-                    i=1
-                    while i==1:
-                        try:
-                            military=input('目前有开战风险，请输入军费投入（大于等于零）')
-                            military=int(military)
-                            smilitary+=military
-                            i=0
-                            if military<0:
-                                i=1
-                                print('这是军费！不能克扣！')                            
-                        except:
-                            i=1
-                    try:
-                        i=input('按1显示军备情况')
-                        i=int(i)
-                        if i==1:
-                            print('目前是开战的第',ywar,'年')
-                            print('投入总军费',smilitary)
-                    except:
-                        i=1
-
-                    if p>mood/60:
-                        mood-=6
-                        
-                    else:
-                        print('你已经挑战了我们的底线，现在开战！')
-                        player=1
-
-                        while player!=5:
-                            try:
-                                player=input('赔款（1），迎战（2）')
-                                player=int(player)
-                                if player==1:
-                                    a3-=1200+200*p
-                                    mood+=8
-                                    player=5
-                                if player==2:
-                                    #开战状态
-                                    mood-=6
-                                    p=random.random()
-                                    pwin=smilitary/(smilitary+800*(ywar))
-                                    player=5
-                                    if pwin>0.8:
-                                        print('轻取敌军，大捷！')
-                                        a3+=1500+500*p
-                                        print('缴获战利品',1500+500*p)
-                                        mood+=10
-                                    elif pwin<0.2:
-                                        print('脆败')
-                                        a3-=1800+500*p
-                                        print('战争赔款',1800+500*p)
-                                        mood+=12
-                                    else:
-                                        print('激烈的战斗！')
-                                        input('任意键继续')
-                                        if pwin>p:
-                                            print('惨烈的胜利！')
-                                            a3+=700+600*p
-                                            print('国库获得',700+600*p)
-                                            
-                                        if pwin<p:
-                                            print('功亏一篑')
-                                            a3-=650+600*p
-                                            print('赔款',650+600*p)
-                                            mood+=4
-                                        else:
-                                            print('两败俱伤')
-                                            a3-=400
-                                            print('补给消耗',400)
-                                            mood+=5
-                                       
-                            except:
-                                player=1
-                            
-
-                    
-                    
-                    
-                        
-                        
-                    
-            
-
+    def __iter__(self):
+        return iter(self.members)
     
+    def __getitem__(self, index):
+        return self.members[index]
     
-    if cr>=8:
-        print('罪犯数为',cr,'游戏结束')
-        break
-    if a3>=20000:
-        print('国库储蓄为',a3,'游戏胜利')
-        if continue1!=1:
-            print('仍可继续')
-            continue1=1
-        
+    def get_total_food(self):
+        return sum(m.food for m in self.members)
+    
+    def get_total_product(self):
+        return sum(m.product for m in self.members)
+    
+    def get_avg_satisfaction(self):
+        if not self.members:
+            return 0
+        return sum(m.satisfaction for m in self.members) / len(self.members)
+    
+    def get_poorest(self):
+        """返回最穷的成员索引"""
+        if not self.members:
+            return -1
+        return min(range(len(self.members)), key=lambda i: self.members[i].total_wealth())
 
+
+class GameState:
+    """游戏状态类"""
+    def __init__(self):
+        # 人口组
+        self.farmers = Group(NF, "农民")
+        self.workers = Group(NW, "工人")
+        self.merchants = Group(NB, "商人")
         
-    if a3<=-20000:
-        print('国库负债为',-a3,'游戏失败')
-        input('按任意键退出')
-        break
-    if cr==0:
-        print('看起来国内一切正常')
-    elif cr<5:
-        print('有一些隐患了看来是')
+        # 公务员组（税务官、民生官员、军事官员、教师、总督）
+        self.ser_size = NT + NPL + NM + NTEA + NG
+        self.civil_servants = Group(self.ser_size, "公务员")
+        
+        # 国库
+        self.treasury = 0.0
+        
+        # 税率
+        self.tax_rate_farmer = 0.05
+        self.tax_rate_worker = 0.1
+        self.tax_rate_merchant = 0.2
+        
+        # 公务员工资
+        self.civil_salary = 20.0
+        
+        # 产品价格
+        self.product_price = 2.02
+        self.merchant_price_multiplier = [12.0, 12.0]  # 商人价位倍数
+        
+        # 运输成本
+        self.transport_cost = 2.0
+        
+        # 游戏状态
+        self.year = 0
+        self.total_years = DEFAULT_YEAR
+        self.disaster_factor = 0.0  # 天灾影响
+        self.crime_count = 0
+        
+        # 外交状态
+        self.diplomatic_state = 0  # 0:未探索，1:慷慨帝国，2:霸权帝国
+        self.diplomatic_mood = 0
+        self.war_mode = False
+        self.war_year = 0
+        self.total_military_spending = 0.0
+        
+        # 成就
+        self.achievements = set()
+    
+    def print_status(self):
+        """打印当前状态"""
+        print(f"\n=== 第 {self.year} 年 ===")
+        print(f"国库：{self.treasury:.1f}")
+        print(f"农民满意度：{self.farmers.get_avg_satisfaction():.1f}")
+        print(f"工人满意度：{self.workers.get_avg_satisfaction():.1f}")
+        print(f"商人满意度：{self.merchants.get_avg_satisfaction():.1f}")
+        print(f"公务员满意度：{self.civil_servants.get_avg_satisfaction():.1f}")
+
+
+# ==================== 游戏逻辑函数 ====================
+def calculate_disaster(game, year):
+    """计算天灾/丰收影响"""
+    if year <= 5:
+        pa = random.random()
+        if pa > 0.66:
+            game.disaster_factor = -0.2
+            print('改革春风吹满地！增产 20%')
+        else:
+            game.disaster_factor = 0
+        return
+    
+    # 5 年后天灾系统
+    px = 0.0
+    pa = random.random()
+    pdisas = 0.1
+    pharvest = 0.2
+    
+    if year < 15:
+        if 4 * pa > pdisas:
+            game.disaster_factor = 0.2
+            print("天灾来临，减产 20%")
+        elif pa < 1 - pharvest:
+            game.disaster_factor = -0.3
+            print('粮食大丰收，洪水被赶跑！增产 30%')
     else:
-        print('山雨欲来了属于是')
-    zz=''
-    while zz!='e':
+        if pa < pdisas - px:
+            game.disaster_factor = 0.8
+            px += 0.05
+            print('天灾蹂躏大地，减产 80%')
+            if px > 0.04 and '天灾如影' not in game.achievements:
+                print('获得成就：天灾如影，常伴吾形')
+                game.achievements.add('天灾如影')
+        elif pa < 3 * pdisas - px:
+            game.disaster_factor = 0.5
+            px += 0.03
+            print('天灾扫过荒野，减产 50%')
+        elif pa < 5 * pdisas - px:
+            game.disaster_factor = 0.2
+            px += 0.01
+            print('天灾降临人间，减产 20%')
+        elif pa > 1 - pharvest * 3 / 5:
+            px = 0
+            game.disaster_factor = -0.4
+            print('百姓安居乐业，齐夸党的领导！增产 40%')
+        else:
+            px = 0
+            game.disaster_factor = 0
+
+
+def farmer_production(game):
+    """农民生产阶段"""
+    for i, farmer in enumerate(game.farmers):
+        if -10 < farmer.satisfaction < 15:
+            # 计算产量
+            base_yield = 130 + 30 * (farmer.intelligence - 50) / 100
+            actual_yield = base_yield * (1 - game.disaster_factor)
+            farmer.for_sale_food = actual_yield
+            
+            # 收税
+            tax = actual_yield * game.tax_rate_farmer
+            game.treasury += tax
+            farmer.food += actual_yield * (1 - game.tax_rate_farmer)
+            
+            # 计算可出售粮食（扣除储备和需求）
+            reserve_need = 30  # 储备需求
+            if farmer.food < 10:
+                farmer.for_sale_food = 0
+                farmer.satisfaction -= 5
+            elif farmer.food < reserve_need:
+                farmer.for_sale_food = 0
+                farmer.satisfaction -= 2
+            else:
+                farmer.for_sale_food = farmer.food - reserve_need
+                farmer.satisfaction += 0.5
+
+
+def worker_production(game):
+    """工人生产阶段"""
+    for i, worker in enumerate(game.workers):
+        if -10 < worker.satisfaction < 15:
+            # 计算产品价格
+            base_price = 15 + 3 * (worker.intelligence - 50) / 100
+            
+            # 生产产品
+            if worker.food >= base_price * 2:
+                worker.product += base_price
+                worker.food -= 2 * base_price
+            else:
+                base_price = worker.food / 2
+                worker.product += base_price
+                worker.food = 0
+            
+            # 根据满意度决定出售量
+            min_product = 2
+            target_product = 6
+            
+            if 10 < worker.satisfaction < 15:
+                min_product -= (worker.satisfaction - 10) * (worker.satisfaction - 15) / 3
+                target_product -= (worker.satisfaction - 10) * (worker.satisfaction - 15)
+            
+            if worker.product < min_product:
+                worker.for_sale_product = 0
+                worker.product = 0
+                worker.satisfaction -= 2
+            elif worker.product < target_product:
+                worker.for_sale_product = 0
+                worker.product -= min_product
+            else:
+                worker.for_sale_product = worker.product - target_product
+                worker.product = target_product
+                worker.satisfaction += 0.5
+            
+            # 粮食不足时调整价格
+            if worker.food < 30 and worker.for_sale_product > 0:
+                needed_price = (30 - worker.food) / (worker.for_sale_product * (1 - game.tax_rate_worker))
+                if needed_price > game.product_price:
+                    game.product_price = needed_price
+
+
+def merchant_buy_from_workers(game):
+    """商人从工人处购买产品"""
+    for i, worker in enumerate(game.workers):
+        if worker.for_sale_product <= 0:
+            continue
         
-        if zz=='满意度':
-            print('农民',sf)
-            print('工人',sw)
-            print('商人',sb)
-            print('公务员',sser)
-        if zz=='粮食':
-            print('农民',a1f)
-            print('工人',a1w)
-            print('商人',a1b)
-            print('公务员',a1ser)
-        if zz=='产品':
-            print('农民',a2f)
-            print('工人',a2w)
-            print('商人',a2b)
-            print('公务员',a2ser)
-        if zz=='国库':
-            print(a3)
-        if zz=='罪犯':
-            print(cr,'名')
+        j = i % NB  # 分配给对应商人
+        merchant = game.merchants[j]
+        
+        # 工人获得粮食
+        revenue = game.product_price * worker.for_sale_product * (1 - game.tax_rate_worker)
+        worker.food += revenue
+        
+        # 商人支付粮食并获得产品
+        cost = game.product_price * worker.for_sale_product
+        merchant.food -= cost
+        merchant.product += worker.product
+        
+        # 税收
+        tax = game.product_price * worker.product * game.tax_rate_worker
+        game.treasury += tax
+        
+        # 记录商人成本
+        # 注意：原代码有 bug，这里修正
+        if not hasattr(merchant, 'total_cost'):
+            merchant.total_cost = 0
+        merchant.total_cost += cost
+        
+        # 清空工人待售产品
+        worker.for_sale_product = 0
+        worker.product = 0  # 产品已卖出
+
+
+def merchant_consume(game):
+    """商人消耗产品"""
+    for merchant in game.merchants:
+        min_product = 2
+        target_product = 6
+        
+        if 10 < merchant.satisfaction < 15:
+            min_product -= (merchant.satisfaction - 10) * (merchant.satisfaction - 15) / 3
+            target_product -= (merchant.satisfaction - 10) * (merchant.satisfaction - 15)
+        
+        if merchant.product < min_product:
+            merchant.product = 0
+            merchant.satisfaction -= 2
+        elif merchant.product < target_product:
+            merchant.product -= min_product
+        else:
+            merchant.product -= target_product
+            merchant.satisfaction += 0.5
+
+
+def civil_servant_buy(game):
+    """公务员购买产品"""
+    for i, cs in enumerate(game.civil_servants):
+        if cs.food < 30:
+            continue
+        
+        j = i % NB  # 分配给对应商人
+        if j >= len(game.merchants):
+            continue
+        merchant = game.merchants[j]
+        
+        if merchant.product <= 0:
+            continue
+        
+        # 计算需求量
+        min_product = 6
+        if 10 < cs.satisfaction < 15:
+            min_product -= (cs.satisfaction - 10) * (cs.satisfaction - 15)
+        elif 0 < cs.satisfaction <= 10:
+            pass  # 保持基础需求
+        else:
+            # 满意度过高或过低，先从国库偷钱
+            t = abs(cs.satisfaction - 7.5) - 7.5
+            if 0.1 * game.treasury > 20 * t:
+                t = 0.005 * game.treasury
+            game.treasury -= 20 * t
+            cs.food += 20 * t
+        
+        needed = min_product - cs.product
+        if needed <= 0:
+            continue
+        
+        # 计算可购买量
+        max_afford = (cs.food - 30) / (1.1 * game.product_price)
+        buy_amount = min(needed, max_afford, merchant.product)
+        
+        if buy_amount > 0:
+            cost = buy_amount * 1.1 * game.product_price
+            cs.food -= cost
+            cs.product += buy_amount
+            merchant.food += cost
+            merchant.product -= buy_amount
             
-        zz=input('输入想查看的量（满意度、粮食、产品、国库、罪犯），继续游戏请输入e')
-
-    if y%3==1:
-        #每三年可以重新设置参数
-        a=input("每三年可以修改参数，是否修改参数？（是/否）")
+            if not hasattr(merchant, 'total_revenue'):
+                merchant.total_revenue = 0
+            merchant.total_revenue += cost
 
 
-        '''输入各种参数，有重新输入机会'''
-        while a=="是":
+def merchant_sell_to_farmers(game):
+    """商人向农民出售产品"""
+    price_multiplier = [10.0, 10.0]  # 初始价格倍数
+    
+    # 价格逐渐下降
+    for k in range(1, 12):
+        for j, merchant in enumerate(game.merchants):
+            if price_multiplier[j] > 2:
+                price_multiplier[j] -= 1
+            else:
+                price_multiplier[j] = 1.01
             
-            
-            '''输入税率'''
-            rtax=2
-            while rtax<0 or rtax>1:
-                try:
-                    rtax=input("请输入农民税率(0-1之间，默认0.05)：")
-                    rtax=float(rtax)
-                   
-                except:
-                    rtax=0.05
-            rtax1=2
-            while rtax1<0 or rtax1>1:
-                try:
-                    rtax1=input("请输入工人税率(0-1之间，默认0.1)：")
-                    rtax1=float(rtax1)
-                   
-                except:
-                    rtax1=0.1
-            rtax2=2
-            while rtax2<0 or rtax2>1:
-                try:
-                    rtax2=input("请输入商人税率(0-1之间，默认0.2)：")
-                    rtax2=float(rtax2)
-                   
-                except:
-                    rtax2=0.2
-            tax=0
-            '''总税款tax，税率rtax'''
-            ser=-10
-            while ser==-10:
-                try:
-                    ser=input("请输入公务员工资(默认20)：")
-                    ser=float(ser)
-           
-                except:
-                    ser=20
-               
-            print("农民税率为",rtax)
-            print("工人税率为",rtax1)
-            print("商人税率为",rtax2)
-            print("公务员工资为",ser)
-            a=input("是否重新输入？")
-    if y%5==0:
-        #每五年可以全面小康
-        strategy='y'
-        while strategy=='y':
-            strategy=input('是否使用 全面小康（每五年可以使用，给某个阶级所有人补贴）（y/n）')
-            if strategy!='y':
-                break
-
-            try:
-                btje=input('输入补贴金额（默认10）')
-                btje=int(btje)
-            except:
-                btje=10
-            if strategy=='y':
-                bttt=input('输入你想补贴的阶级农民（1），工人（2），商人（3），公务员（4）,任意键退出')
-                if bttt=='1':
-                    for i in range(0,nf):
-                        a1f[i]+=10
-                        a3-=10
-                if bttt=='2':
-                    for i in range(0,nw):
-                        a1w[i]+=10
-                        a3-=10
-                if bttt=='3':
-                    for i in range(0,nb):
-                        a1b[i]+=10
-                        a3-=10
-                if bttt=='4':
-                    for i in range(0,nser):
-                        a1ser[i]+=10
-                        a3-=10
-                    j=0
-                    for i in range(0,nt):
-                        
-                        a1t[i]=a1ser[j]
-                        
-                        j+=1
-                    for i in range(0,npl):
-                        a1pl[i]=a1ser[j]
-                        
-                        j+=1
-                    for i in range(0,nm):
-                        a1m[i]=a1ser[j]
-                        
-                        j+=1
-                    for i in range(0,ntea):
-                        a1tea[i]=a1ser[j]
-                        
-                        j+=1
-                    for i in range(0,ng):
-                        a1g[i]=a1ser[j]
-                        
-                        j+=1
-                    '''以上是把公务员的参数分给各个岗位''' 
+            for i, farmer in enumerate(game.farmers):
+                if i % NB != j:
+                    continue
                 
-            
-            
-    aa=input('任意键进入下一年')
-            
-            
+                if farmer.for_sale_food <= 0 or merchant.product <= 0:
+                    continue
+                
+                # 计算需求量
+                min_product = 6
+                target_product = 12.5  # 6 + 6.25
+                
+                if 10 < farmer.satisfaction < 15:
+                    min_product -= (farmer.satisfaction - 10) * (farmer.satisfaction - 15)
+                
+                needed = min_product - farmer.product
+                if needed <= 0:
+                    continue
+                
+                # 计算价格
+                if farmer.for_sale_food > 0:
+                    food_price = farmer.for_sale_food / needed
+                else:
+                    continue
+                
+                sell_price = price_multiplier[j] * (game.product_price + game.transport_cost)
+                
+                if food_price >= sell_price:
+                    buy_amount = min(needed, merchant.product)
+                    cost = buy_amount * sell_price
                     
+                    farmer.food -= cost
+                    farmer.product += buy_amount
+                    merchant.food += cost
+                    merchant.product -= buy_amount
+                    farmer.for_sale_food -= cost / sell_price
+                    
+                    if not hasattr(merchant, 'total_revenue'):
+                        merchant.total_revenue = 0
+                    merchant.total_revenue += cost
 
+
+def calculate_merchant_tax(game):
+    """计算商人税收"""
+    for merchant in game.merchants:
+        if not hasattr(merchant, 'total_revenue'):
+            merchant.total_revenue = 0
+        if not hasattr(merchant, 'total_cost'):
+            merchant.total_cost = 0
+        
+        profit = merchant.total_revenue - merchant.total_cost
+        if profit > 0:
+            tax = profit * game.tax_rate_merchant
+            merchant.food -= tax
+            game.treasury += tax
+        
+        # 重置收支记录
+        merchant.total_revenue = 0
+        merchant.total_cost = 0
+
+
+def pay_civil_salary(game):
+    """支付公务员工资"""
+    for cs in game.civil_servants:
+        cs.food += game.civil_salary
+        game.treasury -= game.civil_salary
+
+
+def consume_food(game):
+    """消耗粮食并更新满意度"""
+    # 农民
+    for farmer in game.farmers:
+        # 补贴
+        if farmer.food < FOOD_CONSUMPTION and farmer.satisfaction <= 2:
+            subsidy = FOOD_CONSUMPTION - farmer.food
+            farmer.food += subsidy
+            game.treasury -= subsidy
+        
+        # 消耗
+        if farmer.food < FOOD_CONSUMPTION:
+            farmer.food = 0
+            farmer.satisfaction -= 5
+        elif farmer.food < 30:
+            farmer.food -= FOOD_CONSUMPTION
+            farmer.satisfaction -= 2
+        else:
+            farmer.food -= FOOD_CONSUMPTION
+            farmer.satisfaction += 0.5
+        
+        # 产品消耗
+        min_product = 2
+        target_product = 6
+        if 10 < farmer.satisfaction < 15:
+            min_product -= (farmer.satisfaction - 10) * (farmer.satisfaction - 15) / 3
+            target_product -= (farmer.satisfaction - 10) * (farmer.satisfaction - 15)
+        
+        if farmer.product < min_product:
+            farmer.product = 0
+            farmer.satisfaction -= 2
+        elif farmer.product < target_product:
+            farmer.product -= min_product
+        else:
+            farmer.product -= target_product
+            farmer.satisfaction += 0.5
+    
+    # 工人
+    for worker in game.workers:
+        if worker.food < FOOD_CONSUMPTION and worker.satisfaction <= 2:
+            subsidy = FOOD_CONSUMPTION - worker.food
+            worker.food += subsidy
+            game.treasury -= subsidy
+        
+        if worker.food < FOOD_CONSUMPTION:
+            worker.food = 0
+            worker.satisfaction -= 5
+        elif worker.food < 30:
+            worker.food -= FOOD_CONSUMPTION
+            worker.satisfaction -= 2
+        else:
+            worker.food -= FOOD_CONSUMPTION
+            worker.satisfaction += 0.5
+    
+    # 商人（无补贴）
+    for merchant in game.merchants:
+        if merchant.food < 0:
+            # 粮食不足，卖出产品
+            if merchant.food + 2 * merchant.product < 30:
+                merchant.food += 2 * merchant.product
+                merchant.product = 0
+            else:
+                delta = merchant.food
+                merchant.food = 30
+                merchant.product -= (30 - delta) / 2
+        elif merchant.food < FOOD_CONSUMPTION:
+            merchant.food = 0
+            merchant.satisfaction -= 5
+        elif merchant.food < 30:
+            merchant.food -= FOOD_CONSUMPTION
+            merchant.satisfaction -= 2
+        else:
+            merchant.food -= FOOD_CONSUMPTION
+            merchant.satisfaction += 0.5
+    
+    # 公务员
+    for cs in game.civil_servants:
+        if cs.food < FOOD_CONSUMPTION:
+            cs.food = 0
+            cs.satisfaction -= 5
+        elif cs.food < 30:
+            cs.food -= FOOD_CONSUMPTION
+            cs.satisfaction -= 2
+        else:
+            cs.food -= FOOD_CONSUMPTION
+            cs.satisfaction += 0.5
+        
+        # 产品消耗
+        min_product = 2
+        target_product = 6
+        if 10 < cs.satisfaction < 15:
+            min_product -= (cs.satisfaction - 10) * (cs.satisfaction - 15) / 3
+            target_product -= (cs.satisfaction - 10) * (cs.satisfaction - 15)
+        
+        if cs.product < min_product:
+            cs.product = 0
+            cs.satisfaction -= 2
+        elif cs.product < target_product:
+            cs.product -= min_product
+        else:
+            cs.product -= target_product
+            cs.satisfaction += 0.5
+
+
+def update_class_satisfaction(game):
+    """更新阶级满意度（最穷的人和最穷阶级）"""
+    # 农民
+    if game.farmers.size > 0:
+        poorest_idx = game.farmers.get_poorest()
+        if poorest_idx >= 0:
+            game.farmers[poorest_idx].satisfaction -= 0.4
+    
+    # 工人
+    if game.workers.size > 0:
+        poorest_idx = game.workers.get_poorest()
+        if poorest_idx >= 0:
+            game.workers[poorest_idx].satisfaction -= 0.4
+    
+    # 公务员
+    if game.civil_servants.size > 0:
+        poorest_idx = game.civil_servants.get_poorest()
+        if poorest_idx >= 0:
+            game.civil_servants[poorest_idx].satisfaction -= 0.4
+    
+    # 计算最穷阶级
+    avg_wealth_farmer = game.farmers.get_avg_satisfaction()
+    avg_wealth_worker = game.workers.get_avg_satisfaction()
+    avg_wealth_ser = game.civil_servants.get_avg_satisfaction()
+    
+    wealths = [avg_wealth_farmer, avg_wealth_worker, avg_wealth_ser]
+    min_wealth = min(wealths)
+    max_wealth = max(wealths)
+    
+    if max_wealth > min_wealth + 10:
+        diff = max_wealth - min_wealth
+        poorest_class = wealths.index(min_wealth)
+        
+        penalty = 1.3 * (math.atan(40) + math.atan(2 * diff - 40))
+        if poorest_class == 1 or poorest_class == 2:  # 工人或公务员
+            penalty *= 1.2
+        
+        if poorest_class == 0:
+            for farmer in game.farmers:
+                farmer.satisfaction -= penalty
+        elif poorest_class == 1:
+            for worker in game.workers:
+                worker.satisfaction -= penalty
+        else:
+            for cs in game.civil_servants:
+                cs.satisfaction -= penalty
+
+
+def update_crime_and_influence(game):
+    """更新犯罪和满意度影响"""
+    game.crime_count = 0
+    
+    groups = [game.farmers, game.workers, game.civil_servants]
+    
+    for group in groups:
+        for i, person in enumerate(group):
+            # 负面满意度影响周围人
+            if -10 < person.satisfaction < 0:
+                if i > 0:
+                    group.members[i-1].satisfaction += 0.1 * person.satisfaction
+                if i > 1:
+                    group.members[i-2].satisfaction += 0.1 * person.satisfaction
+            elif person.satisfaction < -10 or person.satisfaction > 20:
+                j = abs(person.satisfaction - 2.5)
+                if i > 0:
+                    group.members[i-1].satisfaction += (j - 12.5)
+                if i > 1:
+                    group.members[i-2].satisfaction += (j - 12.5)
+                game.crime_count += 1
+    
+    # 无犯罪时全员满意度微增
+    if game.crime_count == 0:
+        for farmer in game.farmers:
+            farmer.satisfaction += 0.1
+        for worker in game.workers:
+            worker.satisfaction += 0.1
+        for cs in game.civil_servants:
+            cs.satisfaction += 0.1
+        for merchant in game.merchants:
+            merchant.satisfaction += 0.1
+
+
+def handle_diplomacy(game):
+    """处理外交事件"""
+    if game.year <= 5:
+        return
+    
+    if game.diplomatic_state == 0:
+        p = random.random()
+        bb = 0.15
+        if p < 0.5 + bb:
+            print('暂无外交风波')
+        else:
+            p = random.random()
+            if p < 0.25:
+                print('收到消息：我帝国物产丰盈，无所不有。国库 +1000')
+                game.treasury += 2000
+                print('成就：大国的见面礼')
+                game.diplomatic_mood = 80
+                game.diplomatic_state = 1  # 慷慨帝国
+            else:
+                print('收到消息：臣服于我，否则帝国的铁骑将荡平你的国家')
+                game.diplomatic_mood = 75
+                game.diplomatic_state = 2  # 霸权帝国
+    
+    elif game.diplomatic_state == 1:  # 慷慨帝国
+        if game.diplomatic_mood > 60:
+            print('你好我的朋友，看来我们需要一些友好交换')
+            choice = get_choice_input('是否进贡（是/否）', ['是', '否'])
+            if choice == '是':
+                delta = 600 + 400 * random.random()
+                game.treasury -= delta
+                game.diplomatic_mood += 2
+                print(f'国库失去 {delta:.1f}')
+                
+                if random.random() > 0.25:
+                    print('我们的友谊长青')
+                    delta = 600 + 800 * random.random()
+                    game.treasury += delta
+                    print(f'国库获得 {delta:.1f}')
+            else:
+                game.diplomatic_mood -= 5
+                p = random.random()
+                if p > 0.6:
+                    print('我们的友谊不经考验吗？')
+                elif p > 0.33:
+                    print('我们仍留有回旋余地')
+                else:
+                    print('望你好自为之')
+        else:
+            print('我们已经解除外交关系')
+            game.war_year += 1
+            handle_war(game, 'generous')
+    
+    elif game.diplomatic_state == 2:  # 霸权帝国
+        if game.diplomatic_mood > 60:
+            print('你好，我们需要一些贡品')
+            choice = get_choice_input('是否进贡（是/否）', ['是', '否'])
+            if choice == '是':
+                delta = 700 + 400 * random.random()
+                game.treasury -= delta
+                game.diplomatic_mood += 2
+                print(f'国库失去 {delta:.1f}')
+            else:
+                game.diplomatic_mood -= 6
+                p = random.random()
+                if p > 0.6:
+                    print('看来你们有自己的想法')
+                elif p > 0.33:
+                    print('你们服从性太差')
+                else:
+                    print('望你好自为之')
+        else:
+            print('我们已经解除外交关系')
+            game.war_year += 1
+            handle_war(game, 'aggressive')
+
+
+def handle_war(game, enemy_type):
+    """处理战争"""
+    p = random.random()
+    
+    military = get_int_input('目前有开战风险，请输入军费投入（大于等于零）', default=0, min_val=0)
+    game.total_military_spending += military
+    
+    if enemy_type == 'aggressive':
+        try:
+            info = get_int_input('按 1 显示军备情况', default=0)
+            if info == 1:
+                print(f'目前是开战的第{game.war_year}年')
+                print(f'投入总军费{game.total_military_spending:.1f}')
+        except:
+            pass
+    
+    if p > game.diplomatic_mood / 60:
+        game.diplomatic_mood -= 6
+    else:
+        print('你已经挑战了我们的底线，现在开战！')
+        choice = get_choice_input('赔款（1），迎战（2）', ['1', '2'])
+        
+        if choice == '1':
+            game.treasury -= 1200 + 200 * p
+            game.diplomatic_mood += 8
+        else:
+            game.diplomatic_mood -= 6
+            pwin = game.total_military_spending / (game.total_military_spending + 800 * game.war_year)
+            
+            if pwin > 0.8:
+                print('轻取敌军，大捷！')
+                reward = 1500 + 500 * p
+                game.treasury += reward
+                print(f'缴获战利品 {reward:.1f}')
+                game.diplomatic_mood += 10
+            elif pwin < 0.2:
+                print('脆败')
+                penalty = 1800 + 500 * p
+                game.treasury -= penalty
+                print(f'战争赔款 {penalty:.1f}')
+                game.diplomatic_mood += 12
+            else:
+                print('激烈的战斗！')
+                input('任意键继续')
+                if pwin > p:
+                    print('惨烈的胜利！')
+                    reward = 700 + 600 * p
+                    game.treasury += reward
+                    print(f'国库获得 {reward:.1f}')
+                elif pwin < p:
+                    print('功亏一篑')
+                    penalty = 650 + 600 * p
+                    game.treasury -= penalty
+                    print(f'赔款 {penalty:.1f}')
+                    game.diplomatic_mood += 4
+                else:
+                    print('两败俱伤')
+                    game.treasury -= 400
+                    print('补给消耗 400')
+                    game.diplomatic_mood += 5
+
+
+def check_game_state(game):
+    """检查游戏状态"""
+    if game.crime_count >= 8:
+        print(f'罪犯数为{game.crime_count}，游戏结束')
+        return 'lose'
+    
+    if game.treasury >= 20000:
+        print(f'国库储蓄为{game.treasury:.1f}，游戏胜利！')
+        return 'win'
+    
+    if game.treasury <= -20000:
+        print(f'国库负债为{-game.treasury:.1f}，游戏失败')
+        return 'lose'
+    
+    return 'continue'
+
+
+def print_status_detail(game):
+    """打印详细状态"""
+    while True:
+        print("\n=== 详细状态 ===")
+        print("输入想查看的量：满意度 (1)、粮食 (2)、产品 (3)、国库 (4)、罪犯 (5)")
+        print("输入 e 继续游戏")
+        
+        choice = input("> ").strip().lower()
+        
+        if choice == 'e':
+            break
+        elif choice == '1' or choice == '满意度':
+            print(f'农民：{[f"{m.satisfaction:.1f}" for m in game.farmers]}')
+            print(f'工人：{[f"{m.satisfaction:.1f}" for m in game.workers]}')
+            print(f'商人：{[f"{m.satisfaction:.1f}" for m in game.merchants]}')
+            print(f'公务员：{[f"{m.satisfaction:.1f}" for m in game.civil_servants]}')
+        elif choice == '2' or choice == '粮食':
+            print(f'农民：{[f"{m.food:.1f}" for m in game.farmers]}')
+            print(f'工人：{[f"{m.food:.1f}" for m in game.workers]}')
+            print(f'商人：{[f"{m.food:.1f}" for m in game.merchants]}')
+            print(f'公务员：{[f"{m.food:.1f}" for m in game.civil_servants]}')
+        elif choice == '3' or choice == '产品':
+            print(f'农民：{[f"{m.product:.1f}" for m in game.farmers]}')
+            print(f'工人：{[f"{m.product:.1f}" for m in game.workers]}')
+            print(f'商人：{[f"{m.product:.1f}" for m in game.merchants]}')
+            print(f'公务员：{[f"{m.product:.1f}" for m in game.civil_servants]}')
+        elif choice == '4' or choice == '国库':
+            print(f'国库：{game.treasury:.1f}')
+        elif choice == '5' or choice == '罪犯':
+            print(f'罪犯：{game.crime_count}名')
+
+
+def subsidy_class(game):
+    """全面小康补贴"""
+    choice = get_choice_input('输入你想补贴的阶级：农民 (1)，工人 (2)，商人 (3)，公务员 (4)', 
+                              ['1', '2', '3', '4'], default='1')
+    amount = get_int_input('输入补贴金额（默认 10）', default=10)
+    
+    if choice == '1':
+        for farmer in game.farmers:
+            farmer.food += amount
+            game.treasury -= amount
+    elif choice == '2':
+        for worker in game.workers:
+            worker.food += amount
+            game.treasury -= amount
+    elif choice == '3':
+        for merchant in game.merchants:
+            merchant.food += amount
+            game.treasury -= amount
+    elif choice == '4':
+        for cs in game.civil_servants:
+            cs.food += amount
+            game.treasury -= amount
+    
+    print(f'已补贴{amount}粮食')
+
+
+def get_tax_settings():
+    """获取税率设置"""
+    print("\n=== 税率设置 ===")
+    tax_farmer = get_float_input("请输入农民税率 (0-1 之间): ", default=0.05, min_val=0, max_val=1)
+    tax_worker = get_float_input("请输入工人税率 (0-1 之间): ", default=0.1, min_val=0, max_val=1)
+    tax_merchant = get_float_input("请输入商人税率 (0-1 之间): ", default=0.2, min_val=0, max_val=1)
+    civil_salary = get_float_input("请输入公务员工资: ", default=20, min_val=0)
+    
+    return tax_farmer, tax_worker, tax_merchant, civil_salary
+
+
+# ==================== 主游戏循环 ====================
+def main():
+    """主函数"""
+    print("=" * 50)
+    print("欢迎来到模拟社会！")
+    print("=" * 50)
+    print("您好长官，我们的国家由您来领导。")
+    print("目前公民分为农民、商人、工人、公务员四个阶级。")
+    print("您需要调控税收来满足他们对于粮食和产品的需求，并充实自己的国库。")
+    print("满意度过低或者过高可能会导致他们成为罪犯！")
+    print("请沉着应对突发的天灾和战争")
+    print("祝您好运！")
+    print("=" * 50)
+    
+    # 初始设置
+    tax_farmer, tax_worker, tax_merchant, civil_salary = get_tax_settings()
+    
+    game = GameState()
+    game.tax_rate_farmer = tax_farmer
+    game.tax_rate_worker = tax_worker
+    game.tax_rate_merchant = tax_merchant
+    game.civil_salary = civil_salary
+    
+    print(f"\n游戏将进行{game.total_years}年")
+    print(f"运输成本为{game.transport_cost}")
+    print(f"农民税率为{game.tax_rate_farmer}")
+    print(f"工人税率为{game.tax_rate_worker}")
+    print(f"商人税率为{game.tax_rate_merchant}")
+    print(f"公务员工资为{game.civil_salary}")
+    
+    # 游戏主循环
+    while game.year < game.total_years:
+        game.year += 1
+        game.treasury = 0  # 重置税收
+        
+        print(f"\n{'='*40}")
+        print(f'现在是第{game.year}年')
+        
+        # 1. 天灾系统
+        calculate_disaster(game, game.year)
+        
+        # 2. 生产阶段
+        farmer_production(game)
+        worker_production(game)
+        
+        # 3. 交易阶段
+        merchant_buy_from_workers(game)
+        merchant_consume(game)
+        civil_servant_buy(game)
+        merchant_sell_to_farmers(game)
+        
+        # 4. 税收和工资
+        calculate_merchant_tax(game)
+        pay_civil_salary(game)
+        
+        # 5. 消耗阶段
+        consume_food(game)
+        
+        # 6. 满意度更新
+        update_class_satisfaction(game)
+        update_crime_and_influence(game)
+        
+        # 7. 外交和战争
+        handle_diplomacy(game)
+        
+        # 8. 检查游戏状态
+        result = check_game_state(game)
+        if result != 'continue':
+            break
+        
+        # 9. 打印状态
+        game.print_status()
+        if game.crime_count == 0:
+            print('看起来国内一切正常')
+        elif game.crime_count < 5:
+            print('有一些隐患了看来是')
+        else:
+            print('山雨欲来了属于是')
+        
+        # 10. 查看详细状态
+        print_status_detail(game)
+        
+        # 11. 每三年可修改税率
+        if game.year % 3 == 1:
+            choice = get_choice_input("每三年可以修改参数，是否修改？（是/否）", ['是', '否', 'y', 'n', 'yes', 'no'])
+            if choice in ['是', 'y', 'yes']:
+                tax_farmer, tax_worker, tax_merchant, civil_salary = get_tax_settings()
+                game.tax_rate_farmer = tax_farmer
+                game.tax_rate_worker = tax_worker
+                game.tax_rate_merchant = tax_merchant
+                game.civil_salary = civil_salary
+        
+        # 12. 每五年可补贴
+        if game.year % 5 == 0:
+            choice = get_choice_input('是否使用全面小康（给某个阶级补贴）？（是/否）', ['是', '否', 'y', 'n'])
+            if choice in ['是', 'y']:
+                subsidy_class(game)
+        
+        input('\n按任意键进入下一年...')
+    
+    print("\n" + "=" * 50)
+    print("游戏结束！")
+    print("=" * 50)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\n游戏已退出")
+    except Exception as e:
+        print(f"\n发生错误：{e}")
+        import traceback
+        traceback.print_exc()
